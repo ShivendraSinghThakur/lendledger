@@ -1,16 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged
-} from "firebase/auth";
 
-// ✅ REPLACE WITH YOUR ACTUAL FIREBASE CONFIG
+// ✅ REPLACE THESE VALUES WITH YOUR ACTUAL FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDa4O5HAVZwM2fqMDkOU2u2uL5n-tlbI0s",
   authDomain: "lendledger-4dcd4.firebaseapp.com",
@@ -20,19 +12,9 @@ const firebaseConfig = {
   appId: "1:725676443116:web:6f4a5d8e602e4ad39a2cc9"
 };
 
-// ✅ REPLACE WITH YOUR ALLOWED EMAILS
-// Only these emails can access the app — everyone else is blocked
-const ALLOWED_EMAILS = [
-  "ksstshivendra26@gmail.com",       // 👈 Replace with your email
-  //"trustedperson1@gmail.com",  // 👈 Replace with trusted person's email (or delete this line)
-  //"trustedperson2@gmail.com",  // 👈 Replace with trusted person's email (or delete this line)
-];
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
 
 const STORAGE_KEY = "lending-tracker-data";
 
@@ -47,10 +29,10 @@ const formatDate = (dateStr) => {
 
 const today = () => new Date().toISOString().split("T")[0];
 
-const calcInterest = (principal, rate, rateType, lentDate) => {
+const calcInterest = (principal, rate, rateType, lentDate, paidDate) => {
   if (!rate || rate === 0) return 0;
   const from = new Date(lentDate);
-  const to = new Date();
+  const to = paidDate ? new Date(paidDate) : new Date();
   const diffMs = to - from;
   if (diffMs <= 0) return 0;
   const days = diffMs / (1000 * 60 * 60 * 24);
@@ -69,121 +51,7 @@ const emptyBorrower = { name: "", phone: "", note: "" };
 const emptyLoan = { amount: "", rate: "", rateType: "monthly", date: today(), note: "" };
 const emptyPayment = { amount: "", date: today(), note: "" };
 
-// ─────────────────────────────────────────────
-// LOGIN SCREEN
-// ─────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const styles = {
-    page: { minHeight: "100vh", background: "#0f0f14", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif" },
-    box: { background: "#16161e", border: "1px solid #2a2a38", borderRadius: "20px", padding: "40px", width: "380px", maxWidth: "95vw" },
-    logo: { fontSize: "28px", fontWeight: "700", color: "#e8b86d", textAlign: "center", marginBottom: "6px" },
-    tagline: { fontSize: "12px", color: "#555", textAlign: "center", fontFamily: "monospace", marginBottom: "32px" },
-    label: { fontSize: "12px", color: "#888", fontFamily: "monospace", letterSpacing: "1px", display: "block", marginBottom: "6px" },
-    input: { background: "#1e1e2a", border: "1px solid #2a2a38", borderRadius: "8px", color: "#e8e4dc", padding: "11px 14px", fontSize: "14px", width: "100%", boxSizing: "border-box", fontFamily: "Georgia, serif", outline: "none", marginBottom: "16px" },
-    btn: { background: "#e8b86d", color: "#0f0f14", border: "none", borderRadius: "8px", padding: "12px", fontWeight: "700", cursor: "pointer", fontSize: "14px", fontFamily: "monospace", width: "100%", marginBottom: "12px" },
-    googleBtn: { background: "transparent", color: "#e8e4dc", border: "1px solid #2a2a38", borderRadius: "8px", padding: "12px", fontWeight: "700", cursor: "pointer", fontSize: "14px", fontFamily: "monospace", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
-    divider: { display: "flex", alignItems: "center", gap: "12px", margin: "16px 0" },
-    dividerLine: { flex: 1, height: "1px", background: "#2a2a38" },
-    dividerText: { color: "#555", fontSize: "12px", fontFamily: "monospace" },
-    error: { background: "#e07d7d22", border: "1px solid #e07d7d44", borderRadius: "8px", padding: "10px 14px", color: "#e07d7d", fontSize: "13px", fontFamily: "monospace", marginBottom: "16px", textAlign: "center" },
-    lock: { textAlign: "center", fontSize: "40px", marginBottom: "16px" },
-  };
-
-  const handleEmailLogin = async () => {
-    if (!email || !password) { setError("Please enter email and password"); return; }
-    if (!ALLOWED_EMAILS.includes(email.toLowerCase().trim())) {
-      setError("Access denied. You are not authorized to use this app."); return;
-    }
-    setLoading(true); setError("");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (e) {
-      setError("Invalid email or password. Please try again.");
-    } finally { setLoading(false); }
-  };
-
-  const handleGoogleLogin = async () => {
-    setLoading(true); setError("");
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const userEmail = result.user.email.toLowerCase().trim();
-      if (!ALLOWED_EMAILS.includes(userEmail)) {
-        await signOut(auth);
-        setError("Access denied. Your Google account is not authorized.");
-        return;
-      }
-    } catch (e) {
-      setError("Google sign-in failed. Please try again.");
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div style={styles.page}>
-      <div style={styles.box}>
-        <div style={styles.lock}>🔐</div>
-        <div style={styles.logo}>💰 LendLedger</div>
-        <div style={styles.tagline}>Secure Money Lending Tracker</div>
-
-        {error && <div style={styles.error}>{error}</div>}
-
-        <label style={styles.label}>EMAIL ADDRESS</label>
-        <input
-          style={styles.input}
-          type="email"
-          placeholder="youremail@gmail.com"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
-        />
-        <label style={styles.label}>PASSWORD</label>
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
-        />
-
-        <button style={styles.btn} onClick={handleEmailLogin} disabled={loading}>
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-
-        <div style={styles.divider}>
-          <div style={styles.dividerLine} />
-          <div style={styles.dividerText}>OR</div>
-          <div style={styles.dividerLine} />
-        </div>
-
-        <button style={styles.googleBtn} onClick={handleGoogleLogin} disabled={loading}>
-          <svg width="18" height="18" viewBox="0 0 48 48">
-            <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
-            <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
-            <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
-            <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        <div style={{ textAlign: "center", marginTop: "24px", fontSize: "11px", color: "#444", fontFamily: "monospace" }}>
-          🔒 Access restricted to authorized users only
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// MAIN APP
-// ─────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [borrowers, setBorrowers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -194,23 +62,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
 
-  // ✅ Watch login state
+  // ✅ Load data from Firebase on app start
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (u && ALLOWED_EMAILS.includes(u.email.toLowerCase().trim())) {
-        setUser(u);
-      } else {
-        setUser(null);
-        if (u) signOut(auth); // sign out unauthorized users
-      }
-      setAuthLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  // ✅ Load data from Firebase
-  useEffect(() => {
-    if (!user) return;
     const loadData = async () => {
       setSyncing(true);
       try {
@@ -219,7 +72,8 @@ export default function App() {
         if (docSnap.exists()) {
           setBorrowers(docSnap.data().borrowers || []);
         }
-      } catch {
+      } catch (e) {
+        // If Firebase fails, fall back to localStorage
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) setBorrowers(JSON.parse(saved));
@@ -230,9 +84,9 @@ export default function App() {
       }
     };
     loadData();
-  }, [user]);
+  }, []);
 
-  // ✅ Save to Firebase
+  // ✅ Save data to Firebase + localStorage as backup
   const save = useCallback(async (data) => {
     setSyncing(true);
     try {
@@ -240,9 +94,14 @@ export default function App() {
       await setDoc(docRef, { borrowers: data });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       setLastSynced(new Date());
-    } catch {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-    } finally { setSyncing(false); }
+    } catch (e) {
+      // If Firebase fails, at least save locally
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {}
+    } finally {
+      setSyncing(false);
+    }
   }, []);
 
   const updateBorrowers = (data) => { setBorrowers(data); save(data); };
@@ -251,7 +110,8 @@ export default function App() {
     let totalLent = 0, totalReturned = 0, totalInterest = 0;
     (b.loans || []).forEach(loan => {
       totalLent += loan.amount;
-      totalInterest += calcInterest(loan.amount, loan.rate, loan.rateType, loan.date);
+      const interest = calcInterest(loan.amount, loan.rate, loan.rateType, loan.date);
+      totalInterest += interest;
     });
     (b.payments || []).forEach(p => totalReturned += p.amount);
     return { totalLent, totalReturned, totalInterest, outstanding: totalLent + totalInterest - totalReturned };
@@ -279,7 +139,8 @@ export default function App() {
   const submitBorrower = () => {
     if (!form.name?.trim()) return;
     const nb = { id: Date.now(), ...form, loans: [], payments: [] };
-    updateBorrowers([...borrowers, nb]);
+    const updated = [...borrowers, nb];
+    updateBorrowers(updated);
     closeModal();
   };
 
@@ -302,7 +163,8 @@ export default function App() {
   };
 
   const deleteBorrower = (id) => {
-    updateBorrowers(borrowers.filter(b => b.id !== id));
+    const updated = borrowers.filter(b => b.id !== id);
+    updateBorrowers(updated);
     setView("dashboard"); setSelected(null);
   };
 
@@ -318,27 +180,16 @@ export default function App() {
     setSelected(updated.find(b => b.id === selected.id));
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    setBorrowers([]);
-    setView("dashboard");
-    setSelected(null);
-  };
-
-  const filteredBorrowers = borrowers.filter(b =>
-    b.name.toLowerCase().includes(search.toLowerCase()) || (b.phone || "").includes(search)
-  );
+  const filteredBorrowers = borrowers.filter(b => b.name.toLowerCase().includes(search.toLowerCase()) || (b.phone || "").includes(search));
 
   const stats = dashStats();
 
   const styles = {
-    app: { minHeight: "100vh", background: "#0f0f14", color: "#e8e4dc", fontFamily: "'Georgia', serif" },
+    app: { minHeight: "100vh", background: "#0f0f14", color: "#e8e4dc", fontFamily: "'Georgia', serif", padding: "0" },
     header: { background: "#16161e", borderBottom: "1px solid #2a2a38", padding: "18px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 },
-    logo: { fontSize: "22px", fontWeight: "700", color: "#e8b86d" },
+    logo: { fontSize: "22px", fontWeight: "700", color: "#e8b86d", letterSpacing: "0.5px" },
     subtitle: { fontSize: "12px", color: "#666", marginTop: "2px", fontFamily: "monospace" },
     syncBadge: { fontSize: "11px", fontFamily: "monospace", padding: "4px 10px", borderRadius: "20px", background: syncing ? "#2a2a38" : "#7ec8a422", color: syncing ? "#888" : "#7ec8a4" },
-    userBadge: { fontSize: "12px", color: "#888", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "10px" },
-    logoutBtn: { background: "transparent", color: "#e07d7d", border: "1px solid #e07d7d33", borderRadius: "6px", padding: "5px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" },
     statBar: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "16px", padding: "24px 28px 0" },
     statCard: { background: "#16161e", border: "1px solid #2a2a38", borderRadius: "12px", padding: "20px 22px" },
     statLabel: { fontSize: "11px", color: "#888", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: "monospace" },
@@ -347,7 +198,7 @@ export default function App() {
     section: { padding: "24px 28px" },
     sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" },
     sectionTitle: { fontSize: "13px", color: "#888", letterSpacing: "2px", textTransform: "uppercase", fontFamily: "monospace" },
-    btn: { background: "#e8b86d", color: "#0f0f14", border: "none", borderRadius: "8px", padding: "9px 18px", fontWeight: "700", cursor: "pointer", fontSize: "13px", fontFamily: "monospace" },
+    btn: { background: "#e8b86d", color: "#0f0f14", border: "none", borderRadius: "8px", padding: "9px 18px", fontWeight: "700", cursor: "pointer", fontSize: "13px", fontFamily: "monospace", letterSpacing: "0.5px" },
     btnSm: { background: "transparent", color: "#e8b86d", border: "1px solid #e8b86d33", borderRadius: "6px", padding: "5px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" },
     btnDanger: { background: "transparent", color: "#e07d7d", border: "1px solid #e07d7d33", borderRadius: "6px", padding: "5px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" },
     card: { background: "#16161e", border: "1px solid #2a2a38", borderRadius: "12px", padding: "18px 20px", marginBottom: "12px", cursor: "pointer", transition: "border-color 0.2s" },
@@ -365,18 +216,6 @@ export default function App() {
     searchBox: { background: "#1e1e2a", border: "1px solid #2a2a38", borderRadius: "8px", color: "#e8e4dc", padding: "9px 14px", fontSize: "13px", width: "220px", fontFamily: "monospace", outline: "none" },
   };
 
-  // Show loading spinner while checking auth
-  if (authLoading) {
-    return (
-      <div style={{ ...styles.app, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#e8b86d", fontFamily: "monospace", fontSize: "16px" }}>🔐 Checking access...</div>
-      </div>
-    );
-  }
-
-  // Show login screen if not logged in
-  if (!user) return <LoginScreen />;
-
   // DETAIL VIEW
   if (view === "detail" && selected) {
     const b = borrowers.find(x => x.id === selected.id) || selected;
@@ -390,15 +229,10 @@ export default function App() {
             <div style={styles.logo}>💰 LendLedger</div>
             <div style={styles.subtitle}>Money Lending Tracker</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={styles.syncBadge}>{syncing ? "⏳ Syncing..." : lastSynced ? "☁️ Synced" : ""}</div>
-            <div style={styles.userBadge}>
-              👤 {user.email.split("@")[0]}
-              <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
-            </div>
+          <div style={styles.syncBadge}>
+            {syncing ? "⏳ Syncing..." : lastSynced ? "☁️ Synced" : ""}
           </div>
         </div>
-
         <div style={styles.section}>
           <button style={styles.backBtn} onClick={() => { setView("dashboard"); setSelected(null); }}>
             ← Back to Dashboard
@@ -577,11 +411,9 @@ export default function App() {
           <div style={styles.logo}>💰 LendLedger</div>
           <div style={styles.subtitle}>Money Lending Tracker</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={styles.syncBadge}>{syncing ? "⏳ Syncing..." : lastSynced ? "☁️ Synced" : ""}</div>
-          <div style={styles.userBadge}>
-            👤 {user.email.split("@")[0]}
-            <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={styles.syncBadge}>
+            {syncing ? "⏳ Syncing..." : lastSynced ? "☁️ Synced" : ""}
           </div>
           <button style={styles.btn} onClick={() => openModal("addBorrower")}>+ New Borrower</button>
         </div>
@@ -617,7 +449,7 @@ export default function App() {
           </div>
         )}
 
-        {filteredBorrowers.map((b) => {
+        {filteredBorrowers.map((b, i) => {
           const sum = getLoanSummary(b);
           const colorIdx = borrowers.indexOf(b);
           return (
